@@ -112,6 +112,9 @@
           (result.shop ? ` at ${result.shop}` : "") +
           (result.offerCount ? ` · ${result.offerCount} offers` : "");
         body.append(el("div", { textContent: detail }));
+        if (result.name) {
+          body.append(el("div", { className: "tp-matched", textContent: `Compared with: ${result.name}` }));
+        }
 
         if (result.matchedBy !== "EAN") {
           body.append(el("div", { className: "tp-note", textContent: `Matched by ${result.matchedBy} — double-check it's the same item.` }));
