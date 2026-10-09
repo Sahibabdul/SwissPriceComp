@@ -1,0 +1,40 @@
+#tp-check-box {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2147483647;
+  width: 260px;
+  padding: 12px 14px;
+  background: #fff;
+  color: #222;
+  border: 1px solid #ddd;
+  border-left: 5px solid #999;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  font: 14px/1.4 system-ui, sans-serif;
+}
+#tp-check-box.tp-cheaper { border-left-color: #d9534f; }
+#tp-check-box.tp-best { border-left-color: #2e9e4f; }
+
+#tp-check-box .tp-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #888;
+  margin-bottom: 4px;
+}
+#tp-check-box .tp-main { font-weight: 700; font-size: 15px; margin-bottom: 2px; }
+#tp-check-box .tp-note { font-size: 12px; color: #a66b00; margin-top: 4px; }
+#tp-check-box .tp-link { display: inline-block; margin-top: 6px; color: #0a66c2; }
+#tp-check-box .tp-close {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  border: none;
+  background: none;
+  font-size: 18px;
+  line-height: 1;
+  color: #999;
+  cursor: pointer;
+}

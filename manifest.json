@@ -1,0 +1,28 @@
+{
+    "name": "SwissPriceComp",
+    "version": "0.0.1",
+    "description": "Shows the lowest Toppreise.ch price on Digitec and Galaxus product pages.",
+    "manifest_version": 2,
+    "icons": {
+        "128": "assets/images/icon.png"
+    },
+    "browser_specific_settings": {
+    "gecko": {
+      "id": "toppreise-check@example.com",
+      "strict_min_version": "115.0"
+    }
+    },
+    "permissions": ["storage"],
+    "host_permissions": ["https://www.toppreise.ch/*"],
+    "background": {
+        "scripts": ["background.js"]
+    },
+    "content_scripts": [
+        {
+        "matches": ["https://www.digitec.ch/*", "https://www.galaxus.ch/*"],
+        "js": ["content.js"],
+        "css": ["content.css"],
+        "run_at": "document_idle"
+        }
+    ]
+}
