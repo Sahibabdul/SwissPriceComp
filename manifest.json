@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "SwissPriceComp",
-  "version": "0.0.1",
-  "description": "Shows the lowest Toppreise.ch price on Digitec and Galaxus product pages.",
+  "version": "0.0.3",
+  "description": "Shows the lowest Toppreise.ch price on Digitec, Galaxus, Interdiscount, Brack and Conrad product pages.",
   "icons": {
     "128": "assets/images/icon.png"
   },
@@ -22,7 +22,13 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://www.digitec.ch/*", "https://www.galaxus.ch/*"],
+      "matches": [
+        "https://www.digitec.ch/*",
+        "https://www.galaxus.ch/*",
+        "https://www.interdiscount.ch/*",
+        "https://www.brack.ch/*",
+        "https://www.conrad.ch/*"
+      ],
       "js": ["content.js"],
       "css": ["content.css"],
       "run_at": "document_idle"

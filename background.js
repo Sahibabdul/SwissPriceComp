@@ -3,7 +3,7 @@
 
 const TOPPREISE = "https://www.toppreise.ch";
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours: be polite, don't hammer Toppreise
-const CACHE_VERSION = "v2"; // bump this to throw away old (possibly wrong) cached results
+const CACHE_VERSION = "v3"; // bump this to throw away old (possibly wrong) cached results
 const MIN_SIMILARITY = 0.5; // how alike the two product names must be (0..1)
 
 // ---- Things you may need to tweak after looking at Toppreise's real HTML ----
@@ -35,8 +35,12 @@ async function lookup(product) {
   let result = { status: "not-found", searchUrl: SEARCH_URL(product.name) };
   try {
     for (const { query, matchedBy } of attempts) {
-      const found = await searchToppreise(query, product.name);
+      const found = await searchToppreise(query, product);
       console.log("[Toppreise Check]", matchedBy, query, "→", found);
+      if (found && found.brandMismatch) {
+        result.brandMismatch = found.brandMismatch; // remember why, keep trying
+        continue;
+      }
       if (found) {
         result = { status: "ok", ...found, matchedBy };
         break;
@@ -50,42 +54,94 @@ async function lookup(product) {
   return result;
 }
 
-// Returns an offer for the product, or null if nothing on Toppreise really matches it.
-async function searchToppreise(query, wantedName) {
+// Returns an offer for the product, null if nothing on Toppreise matches it,
+// or { brandMismatch } if the only matches were from a different brand.
+async function searchToppreise(query, product) {
   const search = await fetchPage(SEARCH_URL(query));
 
   // Case 1: Toppreise jumped straight to a product page (common for an exact EAN).
   if (search.url.includes("/preisvergleich/")) {
-    return checkedOffer(search.doc, search.url, wantedName);
+    return checkedOffer(search.doc, search.url, product);
   }
 
   // Case 2: a results list. Score every product link by how well it matches our product
   // and only open the best one, instead of blindly taking the first link on the page.
+  let otherBrand = null;
   const candidates = [...search.doc.querySelectorAll(PRODUCT_LINK_SELECTOR)]
     .map((a) => {
       const url = new URL(a.getAttribute("href"), TOPPREISE).href;
       const label = `${a.textContent} ${a.title || ""} ${slugText(url)}`;
-      return { url, score: similarity(wantedName, label) };
+      return { url, label, score: similarity(product.name, label) };
     })
-    .filter((c) => c.score >= MIN_SIMILARITY)
+    .filter((c) => {
+      // Brand check on the result list: the link text or URL must mention the brand.
+      if (product.brand && !mentionsBrand(c.label, product.brand)) {
+        otherBrand = otherBrand || slugText(c.url).split(" ")[0];
+        return false;
+      }
+      return c.score >= MIN_SIMILARITY;
+    })
     .sort((a, b) => b.score - a.score);
 
-  if (!candidates.length) return null;
+  if (!candidates.length) return otherBrand ? { brandMismatch: otherBrand } : null;
   const page = await fetchPage(candidates[0].url);
-  return checkedOffer(page.doc, page.url, wantedName);
+  return checkedOffer(page.doc, page.url, product);
 }
 
-// Read the offer from a product page, but only accept it if the names match.
-function checkedOffer(doc, url, wantedName) {
+// Read the offer from a product page, but only accept it if brand and name match.
+function checkedOffer(doc, url, product) {
   const offer = extractOffer(doc);
   if (!offer) return null;
   const name = offer.name || pageTitle(doc);
-  const score = similarity(wantedName, name || slugText(url));
+  const label = `${name || ""} ${slugText(url)}`;
+
+  // Brand check on the product page. Prefer Toppreise's own brand field;
+  // if it has none, the brand must at least appear in the product name or URL.
+  let brandChecked = false;
+  if (product.brand) {
+    const tpBrand = offer.brand;
+    const ok = tpBrand ? sameBrand(tpBrand, product.brand) : mentionsBrand(label, product.brand);
+    if (!ok) {
+      console.log("[Toppreise Check] rejected brand:", tpBrand || label, "≠", product.brand);
+      return { brandMismatch: tpBrand || slugText(url).split(" ")[0] };
+    }
+    brandChecked = true;
+  }
+
+  const score = similarity(product.name, name || slugText(url));
   if (score < MIN_SIMILARITY) {
     console.log("[Toppreise Check] rejected:", name, "score", score.toFixed(2));
     return null;
   }
-  return { ...offer, name, url };
+  return { ...offer, name, url, brandChecked };
+}
+
+// ---------- Brand matching ----------
+
+// "De'Longhi" -> "delonghi", "Samsung Electronics" -> "samsungelectronics"
+function normBrand(b) {
+  return String(b || "").toLowerCase().normalize("NFD").replace(/[^a-z0-9]/g, "");
+}
+
+// Equal, or one contains the other ("Samsung" vs "Samsung Electronics").
+function sameBrand(a, b) {
+  const x = normBrand(a);
+  const y = normBrand(b);
+  return !!x && !!y && (x === y || x.includes(y) || y.includes(x));
+}
+
+// Does the text mention the brand? Compares with punctuation and spaces removed,
+// so "DE-LONGHI", "De'Longhi" and "DeLonghi" all count.
+function mentionsBrand(text, brand) {
+  const b = normBrand(brand);
+  return !!b && normBrand(text).includes(b);
+}
+
+function readBrandLd(data) {
+  let b = data.brand || data.manufacturer;
+  if (Array.isArray(b)) b = b[0];
+  if (b && typeof b === "object") b = b.name;
+  return typeof b === "string" && b.trim() ? b.trim() : null;
 }
 
 async function fetchPage(url) {
@@ -154,6 +210,7 @@ function extractOffer(doc) {
         offerCount: offers.offerCount ? Number(offers.offerCount) : null,
         shop: null,
         name: data.name || null,
+        brand: readBrandLd(data),
         approximate: false,
       };
     }
@@ -169,6 +226,7 @@ function extractOffer(doc) {
         offerCount: priced.length,
         shop: priced[0].shop || null,
         name: data.name || null,
+        brand: readBrandLd(data),
         approximate: false,
       };
     }
@@ -181,7 +239,7 @@ function extractOffer(doc) {
     .map((m) => parsePrice(m[1]))
     .filter((p) => p != null && p >= 1); // skip "CHF 0.00" shipping lines etc.
   if (!prices.length) return null;
-  return { lowPrice: Math.min(...prices), offerCount: null, shop: null, name: null, approximate: true };
+  return { lowPrice: Math.min(...prices), offerCount: null, shop: null, name: null, brand: null, approximate: true };
 }
 
 function readJsonLd(doc) {
